@@ -4,7 +4,14 @@ set(Caffe_LINKER_LIBS "")
 # ---[ Boost
 find_package(Boost 1.46 REQUIRED COMPONENTS system thread filesystem)
 include_directories(SYSTEM ${Boost_INCLUDE_DIR})
+add_definitions(-DBOOST_ALL_NO_LIB)
 list(APPEND Caffe_LINKER_LIBS ${Boost_LIBRARIES})
+
+if(DEFINED MSVC)
+  # We should define this only when necessary,
+  # i.e VS 2013 Update 4 or earlier.
+  add_definitions(-DBOOST_NO_CXX11_TEMPLATE_ALIASES)
+endif()
 
 # ---[ Threads
 find_package(Threads REQUIRED)
@@ -24,7 +31,17 @@ list(APPEND Caffe_LINKER_LIBS ${GFLAGS_LIBRARIES})
 include(cmake/ProtoBuf.cmake)
 
 # ---[ HDF5
-find_package(HDF5 COMPONENTS HL REQUIRED)
+if(MSVC)
+  # Find HDF5 using it's hdf5-config.cmake file with MSVC
+  if(DEFINED HDF5_DIR)
+    list(APPEND CMAKE_MODULE_PATH ${HDF5_DIR})
+  endif()
+  find_package(HDF5 COMPONENTS C HL REQUIRED)
+  set(HDF5_LIBRARIES hdf5-shared)
+  set(HDF5_HL_LIBRARIES hdf5_hl-shared)
+else()
+  find_package(HDF5 COMPONENTS HL REQUIRED)
+endif()
 include_directories(SYSTEM ${HDF5_INCLUDE_DIRS} ${HDF5_HL_INCLUDE_DIR})
 list(APPEND Caffe_LINKER_LIBS ${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
 
@@ -155,6 +172,9 @@ if(BUILD_python)
   endif()
   if(PYTHONLIBS_FOUND AND NUMPY_FOUND AND Boost_PYTHON_FOUND)
     set(HAVE_PYTHON TRUE)
+    if(Boost_USE_STATIC_LIBS AND MSVC)
+      add_definitions(-DBOOST_PYTHON_STATIC_LIB)
+    endif()
     if(BUILD_python_layer)
       add_definitions(-DWITH_PYTHON_LAYER)
       include_directories(SYSTEM ${PYTHON_INCLUDE_DIRS} ${NUMPY_INCLUDE_DIR} ${Boost_INCLUDE_DIRS})
@@ -165,11 +185,17 @@ endif()
 
 # ---[ Matlab
 if(BUILD_matlab)
-  find_package(MatlabMex)
-  if(MATLABMEX_FOUND)
-    set(HAVE_MATLAB TRUE)
+  if(MSVC)
+    find_package(Matlab COMPONENTS MAIN_PROGRAM MX_LIBRARY)
+    if(MATLAB_FOUND)
+      set(HAVE_MATLAB TRUE)
+    endif()
+  else()
+    find_package(MatlabMex)
+    if(MATLABMEX_FOUND)
+      set(HAVE_MATLAB TRUE)
+    endif()
   endif()
-
   # sudo apt-get install liboctave-dev
   find_program(Octave_compiler NAMES mkoctfile DOC "Octave C++ compiler")
 
